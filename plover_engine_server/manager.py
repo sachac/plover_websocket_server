@@ -8,11 +8,12 @@ import jsonpickle
 
 from plover import log
 from plover.engine import StenoEngine
-from plover.steno import Stroke
+from plover.steno import Stroke, normalize_steno
 from plover.config import Config
 from plover.oslayer.config import CONFIG_DIR
 from plover.formatting import _Action
 from plover.steno_dictionary import StenoDictionaryCollection
+from plover.translation import unescape_translation
 
 from plover_engine_server.errors import (
     ERROR_MISSING_ENGINE,
@@ -96,6 +97,26 @@ class EngineServerManager():
                 self._engine._machine._last_stroke_key_down_count = 0
 
             import traceback
+
+            if 'look_up' in data: # returns strokes
+                translation = unescape_translation(data['look_up'].strip())
+                result = self._engine.get_suggestions(translation)
+                self._server.queue_message({'look_up_result': [{'text': x.text, 'steno_list': x.steno_list} for x in result]})
+
+            if 'get_translation' in data:
+                steno_keys = data['get_translation']
+                if isinstance(steno_keys, str):
+                    steno_keys = normalize_steno(steno_keys)
+                result = self._engine.lookup_from_all(steno_keys)
+                result = [(x[0], x[1].path) for x in result]
+                self._server.queue_message({'get_translation_result': {'key': steno_keys, 'result': result}})
+
+            if 'add_translation' in data and 'key' in data['add_translation']:
+                steno_keys = data['add_translation']['key']
+                if isinstance(steno_keys, str):
+                    steno_keys = normalize_steno(steno_keys)
+                translation = data['add_translation']['translation']
+                self._engine.add_translation(steno_keys, translation)
 
             if 'stroke' in data:
                 steno_keys = data['stroke']
